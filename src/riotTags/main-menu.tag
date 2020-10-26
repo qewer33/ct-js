@@ -283,6 +283,48 @@ main-menu.flexcol
             })
             .catch(alertify.error);
         };
+        this.mobileExport = async () => {
+            const {getBuildDir, getExportDir} = require('./data/node_requires/platformUtils');
+            const settings = global.currentProject.settings,
+                  title = settings.authoring.title.replace(/\s/ig,'_'),
+                  appName = settings.authoring.appId || 'rocks.ctjs.unidentified';
+            const exportPath = path.join(await getBuildDir(), `${title}-cordova`);
+            alertify.log('Working…');
+            if (exportPath) {
+                try {
+                    const path = require('path');
+                    const {promisify} = require('util');
+                    const exec = promisify(require('child_process').exec);
+                    const cordovaPath = path.join(path.dirname(require.resolve('cordova')), 'bin', 'cordova');
+
+                    const runCtExport = require('./data/node_requires/exporter');
+                    await runCtExport(global.currentProject, global.projdir);
+
+                    const inDir = await getExportDir();
+                    await fs.remove(exportPath);
+                    await fs.mkdir(exportPath, {
+                        recursive: true
+                    });
+                    await exec(`${cordovaPath} create ${exportPath} ${appName} ${title}`, {
+                        cwd: exportPath
+                    });
+                    await fs.remove(path.join(exportPath, 'www'));
+                    await fs.copy(inDir, path.join(exportPath, 'www'));
+
+                    await exec(`${cordovaPath} platform add android`, {
+                        cwd: exportPath
+                    });
+                    await exec(`${cordovaPath} build`, {
+                        cwd: exportPath
+                    });
+
+                    alertify.success(this.voc.successZipExport.replace('{0}', exportPath));
+                } catch(e) {
+                    alertify.error(e);
+                    console.error(e);
+                }
+            }
+        };
 
         const troubleshootingSubmenu = {
             items: [{
@@ -493,6 +535,10 @@ main-menu.flexcol
                 label: this.voc.zipExport,
                 click: this.zipExport,
                 icon: 'upload-cloud'
+            }, {
+                label: `${this.voc.mobileExport} ${this.vocGlob.experimental}`,
+                click: this.mobileExport,
+                icon: 'smartphone'
             }, {
                 label: this.voc.zipProject,
                 click: this.zipProject
